@@ -1,0 +1,69 @@
+# Copyright 2026 The Bureau Authors
+# SPDX-License-Identifier: Apache-2.0
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: Build and validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: DeterminateSystems/determinate-nix-action@v3
+
+      - name: Configure Nix binary cache
+        run: |
+          cat <<'EOF' | sudo tee /etc/nix/nix.custom.conf
+          accept-flake-config = true
+          extra-substituters = https://cache.infra.bureau.foundation
+          extra-trusted-public-keys = cache.infra.bureau.foundation-1:3hpghLePqloLp0qMpkgPy/i0gKiL/Sxl2dY8EHZgOeY= cache.infra.bureau.foundation-2:e1rDOXBK+uLDTT+YU2UzIzkNHpLEaG2jCHZumlH1UmY=
+          EOF
+          sudo systemctl restart nix-daemon
+
+      - name: Build
+        run: nix build
+
+      - name: Validate Bureau template output
+        run: |
+          template=$(nix eval --json .#bureauTemplate.x86_64-linux)
+          echo "$template" | jq .
+
+          # Verify required fields exist.
+          echo "$template" | jq -e '.description' > /dev/null
+          echo "$template" | jq -e '.command | length > 0' > /dev/null
+          echo "$template" | jq -e '.command[0] | test("/nix/store/")' > /dev/null
+          echo "$template" | jq -e '.inherits | length > 0' > /dev/null
+          echo "$template" | jq -e '.required_services | length > 0' > /dev/null
+          echo "$template" | jq -e '.proxy_services.anthropic.upstream' > /dev/null
+
+      - name: Shellcheck
+        run: shellcheck entry.sh
+
+      - name: Push to Nix binary cache
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        continue-on-error: true
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          echo "${{ secrets.NIX_CACHE_SIGNING_KEY }}" > /tmp/nix-signing-key
+          trap 'rm -f /tmp/nix-signing-key' EXIT
+
+          CACHE="s3://bureau-cache?endpoint=${{ secrets.R2_ENDPOINT }}&region=auto"
+
+          nix store sign --key-file /tmp/nix-signing-key -r .#default
+          nix copy --to "$CACHE" .#default
