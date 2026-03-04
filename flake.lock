@@ -7,11 +7,11 @@
         "nixpkgs": "nixpkgs"
       },
       "locked": {
-        "lastModified": 1772420257,
-        "narHash": "sha256-TicJiiyroXHN4/N7zfTKVR+/F8UuP2o5MbA9lmimWdI=",
+        "lastModified": 1772608682,
+        "narHash": "sha256-JtCKD2Kw9f3ZjkD/Fb/Pj1Tpu2mTsW1vpdJXhgNrg9Q=",
         "owner": "bureau-foundation",
         "repo": "bureau",
-        "rev": "deca4806dd6451c69c279538a061bc2dfc165ef0",
+        "rev": "251197c0121a0cca776b893996eba22e1aa8104e",
         "type": "github"
       },
       "original": {
